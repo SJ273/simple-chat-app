@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SJ273のチャット</title>
+  <style>
+    :root {
+      --bg:       #1e1f22;
+      --surface:  #2b2d31;
+      --surface2: #313338;
+      --bubble:   #3f4147;
+      --accent:   #5865f2;
+      --accent-h: #4752c4;
+      --danger:   #da373c;
+      --danger-h: #a12d31;
+      --text:     #dcddde;
+      --muted:    #b5bac1;
+      --dim:      #72767d;
+      --system:   #5865f2;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ══ ヘッダー ══════════════════════════════════ */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid #1a1b1e;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 {
+      font-size: 1rem;
+      font-weight: 700;
+      flex: 1;
+    }
+    #headerCount {
+      font-size: 0.8rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    /* ══ ロビー ════════════════════════════════════ */
+    #lobby {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      gap: 20px;
+    }
+    .lobby-card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 24px;
+      width: 100%;
+      max-width: 400px;
+    }
+    .lobby-card h2 {
+      font-size: 1rem;
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    #preUsers {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 4px;
+      min-height: 24px;
+    }
+    #preUsers li {
+      background: var(--bubble);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 0.8rem;
+    }
+    .empty-note {
+      font-size: 0.8rem;
+      color: var(--dim);
+    }
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .field-group input {
+      width: 100%;
+      padding: 11px 14px;
+      border-radius: 8px;
+      border: 1px solid #1a1b1e;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .field-group input::placeholder { color: var(--dim); }
+    .field-group input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    #joinBtn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-top: 4px;
+    }
+    #joinBtn:hover { background: var(--accent-h); }
+    #lobbyError {
+      color: #f87171;
+      font-size: 0.82rem;
+      margin-top: 8px;
+      min-height: 18px;
+    }
+
+    /* ══ チャット ═══════════════════════════════════ */
+    #chatArea {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* サイドバー＋メッセージの2カラム（PC） */
+    .chat-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── サイドバー（PC のみ表示） ── */
+    #sidebar {
+      width: 200px;
+      flex-shrink: 0;
+      background: var(--surface2);
+      padding: 16px 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #sidebar h3 {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--dim);
+      text-transform: uppercase;
+    }
+    #sideUsers {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    #sideUsers li {
+      font-size: 0.85rem;
+      color: var(--muted);
+      padding: 4px 6px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #sideUsers li::before {
+      content: '';
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #23a55a;
+      flex-shrink: 0;
+    }
+    #leaveBtn {
+      margin-top: auto;
+      padding: 9px;
+      border-radius: 8px;
+      border: none;
+      background: #3f4147;
+      color: var(--muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    #leaveBtn:hover { background: var(--danger); color: #fff; }
+
+    /* ── メッセージエリア ── */
+    .msg-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    #messages li {
+      padding: 8px 11px;
+      background: var(--bubble);
+      border-radius: 8px;
+      font-size: 0.88rem;
+      word-break: break-word;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    #messages li.system-msg {
+      background: transparent;
+      color: var(--dim);
+      font-size: 0.78rem;
+      font-style: italic;
+      padding: 2px 4px;
+    }
+    .msg-text { flex: 1; line-height: 1.5; }
+    .msg-time { font-size: 0.72rem; color: var(--dim); white-space: nowrap; padding-top: 2px; }
+    .del-btn {
+      flex-shrink: 0;
+      padding: 3px 8px;
+      border-radius: 5px;
+      border: none;
+      background: var(--danger);
+      color: #fff;
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .del-btn:hover { background: var(--danger-h); }
+
+    /* typing indicator */
+    #typingBar {
+      padding: 4px 14px 2px;
+      font-size: 0.75rem;
+      color: var(--dim);
+      font-style: italic;
+      min-height: 20px;
+    }
+
+    /* 新着バッジ */
+    #newBadge {
+      display: none;
+      position: sticky;
+      bottom: 4px;
+      align-self: center;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.78rem;
+      padding: 5px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    /* ── 入力欄 ── */
+    .input-bar {
+      padding: 10px 12px;
+      background: var(--surface2);
+      border-top: 1px solid #1a1b1e;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    #input {
+      flex: 1;
+      padding: 10px 13px;
+      border-radius: 8px;
+      border: none;
+      background: var(--bubble);
+      color: var(--text);
+      font-size: 0.9rem;
+      resize: none;
+      height: 42px;
+      max-height: 120px;
+      overflow-y: auto;
+      line-height: 1.4;
+    }
+    #input::placeholder { color: var(--dim); }
+    #input:focus { outline: none; }
+    #sendBtn {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    #sendBtn:hover { background: var(--accent-h); }
+
+    /* スマホ用ボトムバー（退室＋人数） */
+    #mobileBar {
+      display: none;
+      padding: 8px 12px;
+      background: var(--surface);
+      border-top: 1px solid #1a1b1e;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    #mobileLeaveBtnWrap button {
+      padding: 6px 14px;
+      border-radius: 7px;
+      border: none;
+      background: #3f4147;
+      color: var(--muted);
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    #mobileLeaveBtnWrap button:hover { background: var(--danger); color: #fff; }
+
+    /* ══ レスポンシブ ════════════════════════════════ */
+    @media (max-width: 600px) {
+      #sidebar { display: none; }
+      #mobileBar { display: flex; }
+      header { padding: 10px 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>💬 SJ273のチャット</h1>
+  <span id="headerCount">接続中...</span>
+</header>
+
+<!-- ロビー -->
+<div id="lobby">
+  <div class="lobby-card">
+    <h2>現在オンライン</h2>
+    <ul id="preUsers"><li class="empty-note">誰もいません</li></ul>
+  </div>
+  <div class="lobby-card">
+    <h2 style="color: red">本名や住所などの個人情報を絶対に書かないでください。</h2>
+    <div class="field-group">
+      <input id="username" placeholder="名前（20文字まで）" maxlength="20">
+      <input id="adminPassword" type="password" placeholder="管理者パスワード（任意）">
+      <button id="joinBtn">入室する</button>
+    </div>
+    <p id="lobbyError"></p>
+  </div>
+</div>
+
+<!-- チャット -->
+<div id="chatArea">
+  <div class="chat-layout">
+    <!-- PC サイドバー -->
+    <aside id="sidebar">
+      <h3>オンライン</h3>
+      <ul id="sideUsers"></ul>
+      <button id="leaveBtn">退室する</button>
+    </aside>
+
+    <!-- メッセージ列 -->
+    <div class="msg-column">
+      <ul id="messages"></ul>
+      <div id="typingBar"></div>
+      <div id="newBadge">↓ 新しいメッセージ</div>
+    </div>
+  </div>
+
+  <!-- スマホ用ボトムバー -->
+  <div id="mobileBar">
+    <span id="mobileCount"></span>
+    <div id="mobileLeaveBtnWrap"><button id="mobileleaveBtn">退室する</button></div>
+  </div>
+
+  <div class="input-bar">
+    <input id="input" placeholder="メッセージを入力... （/name 名前・/clear・/kick ユーザー名）">
+    <button id="sendBtn">送信</button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io(); // ロビーから接続して人数を表示
+
+  let isAdmin  = false;
+  let joined   = false;
+  let myName   = "";
+
+  // ── 要素 ──
+  const lobbyEl      = document.getElementById("lobby");
+  const chatAreaEl   = document.getElementById("chatArea");
+  const preUsers     = document.getElementById("preUsers");
+  const sideUsers    = document.getElementById("sideUsers");
+  const messagesEl   = document.getElementById("messages");
+  const inputEl      = document.getElementById("input");
+  const typingBar    = document.getElementById("typingBar");
+  const newBadge     = document.getElementById("newBadge");
+  const headerCount  = document.getElementById("headerCount");
+  const mobileCount  = document.getElementById("mobileCount");
+  const lobbyError   = document.getElementById("lobbyError");
+
+  // ── ユーザー一覧・人数 ──
+  socket.on("user count", n => {
+    headerCount.textContent = `オンライン: ${n}人`;
+    mobileCount.textContent = `オンライン: ${n}人`;
+  });
+
+  socket.on("user list", users => {
+    // ロビー
+    if (!joined) {
+      preUsers.innerHTML = users.length
+        ? users.map(u => `<li>${u}</li>`).join("")
+        : `<li class="empty-note">誰もいません</li>`;
+    }
+    // サイドバー
+    sideUsers.innerHTML = users.map(u => `<li>${u}</li>`).join("");
+  });
+
+  // ── 入室結果 ──
+  socket.on("join result", ({ ok, isAdmin: admin, reason }) => {
+    if (!ok) {
+      lobbyError.textContent = reason || "入室できませんでした";
+      return;
+    }
+    isAdmin = admin;
+    joined  = true;
+    lobbyEl.style.display    = "none";
+    chatAreaEl.style.display = "flex";
+    inputEl.focus();
+  });
+
+  // ── チャットメッセージ ──
+  socket.on("chat message", msg => appendMessage(msg));
+
+  // ── システムメッセージ ──
+  socket.on("system message", ({ message }) => {
+    const li = document.createElement("li");
+    li.classList.add("system-msg");
+    li.textContent = message;
+    messagesEl.appendChild(li);
+    autoScroll();
+  });
+
+  // ── 個別削除 ──
+  socket.on("delete message", id => {
+    const el = messagesEl.querySelector(`li[data-id="${id}"]`);
+    if (el) el.remove();
+  });
+
+  // ── 全削除 ──
+  socket.on("clear messages", () => { messagesEl.innerHTML = ""; });
+
+  // ── キック ──
+  socket.on("kicked", () => {
+    alert("管理者にキックされました");
+    location.reload();
+  });
+
+  // ── Typing indicator ──
+  const typingUsers = new Set();
+  let typingTimeout = null;
+
+  socket.on("typing start", name => {
+    typingUsers.add(name);
+    renderTyping();
+  });
+  socket.on("typing stop", name => {
+    typingUsers.delete(name);
+    renderTyping();
+  });
+  function renderTyping() {
+    if (typingUsers.size === 0) { typingBar.textContent = ""; return; }
+    const names = [...typingUsers].join("、");
+    typingBar.textContent = `${names} が入力中...`;
+  }
+
+  // ── メッセージ追加 ──
+  function appendMessage(msg) {
+    const li = document.createElement("li");
+    li.dataset.id = msg.id || "";
+
+    const text = document.createElement("span");
+    text.classList.add("msg-text");
+    text.textContent = `${msg.username}: ${msg.message}`;
+    li.appendChild(text);
+
+    if (msg.time) {
+      const t = document.createElement("span");
+      t.classList.add("msg-time");
+      t.textContent = msg.time;
+      li.appendChild(t);
+    }
+
+    if (isAdmin && msg.id) {
+      const btn = document.createElement("button");
+      btn.classList.add("del-btn");
+      btn.textContent = "削除";
+      btn.onclick = () => socket.emit("delete message", msg.id);
+      li.appendChild(btn);
+    }
+
+    messagesEl.appendChild(li);
+    autoScroll();
+  }
+
+  // ── 自動スクロール・新着バッジ ──
+  function isAtBottom() {
+    return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
+  }
+  function autoScroll() {
+    if (isAtBottom()) {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      newBadge.style.display = "none";
+    } else {
+      newBadge.style.display = "block";
+    }
+  }
+  newBadge.onclick = () => {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    newBadge.style.display = "none";
+  };
+  messagesEl.addEventListener("scroll", () => {
+    if (isAtBottom()) newBadge.style.display = "none";
+  });
+
+  // ── 参加ボタン ──
+  document.getElementById("joinBtn").onclick = () => {
+    lobbyError.textContent = "";
+    myName = document.getElementById("username").value.trim() || "名無し";
+    const pw = document.getElementById("adminPassword").value;
+    socket.emit("join", { username: myName, password: pw });
+  };
+  document.getElementById("username").addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("joinBtn").click();
+  });
+
+  // ── 退室ボタン ──
+  function doLeave() {
+    if (!confirm("退室しますか？")) return;
+    socket.emit("leave");
+    location.reload();
+  }
+  document.getElementById("leaveBtn").onclick = doLeave;
+  document.getElementById("mobileleaveBtn").onclick = doLeave;
+
+  // ── 送信 ──
+  document.getElementById("sendBtn").onclick = sendMessage;
+  inputEl.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+
+  // Typing indicator 送信
+  let typingSent = false;
+  inputEl.addEventListener("input", () => {
+    if (!joined) return;
+    if (inputEl.value.trim()) {
+      if (!typingSent) { socket.emit("typing start"); typingSent = true; }
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => { socket.emit("typing stop"); typingSent = false; }, 2000);
+    } else {
+      socket.emit("typing stop");
+      typingSent = false;
+      clearTimeout(typingTimeout);
+    }
+  });
+
+  function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text) return;
+    socket.emit("chat message", { message: text });
+    inputEl.value = "";
+    socket.emit("typing stop");
+    typingSent = false;
+    clearTimeout(typingTimeout);
+  }
+</script>
+</body>
+</html>
