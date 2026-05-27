@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const http    = require("http");
 const { Server } = require("socket.io");
-const sqlite3 = require("sqlite3").verbose();
+const Database = require("better-sqlite3"); // ★変更
 const fs      = require("fs");
 
 const app    = express();
@@ -13,18 +13,17 @@ app.use(express.static("public"));
 
 // ── DB ──────────────────────────────────────────
 const DB_PATH = process.env.DB_PATH || "chat.db";
-const db = new sqlite3.Database(DB_PATH);
+const db = new Database(DB_PATH); // ★変更（同期処理なのでserialize等も不要になります）
 
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS messages (
-      id       INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT,
-      message  TEXT,
-      time     TEXT
-    )
-  `);
-});
+// テーブル作成
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS messages (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT,
+    message  TEXT,
+    time     TEXT
+  )
+`).run(); // ★変更
 
 // ── 管理者ログ ───────────────────────────────────
 const LOG_PATH = process.env.LOG_PATH || "admin.log";
@@ -36,10 +35,7 @@ function writeAdminLog(entry) {
 }
 
 // ── 接続中ユーザー管理 ──────────────────────────
-// socketId → { username, isAdmin }
 const activeUsers = new Map();
-
-// 一時離脱中: username → { timer, isAdmin }
 const awayUsers = new Map();
 
 function takenNames() {
@@ -84,7 +80,6 @@ function clearTyping(socket) {
 
 // ── Socket.IO ─────────────────────────────────
 io.on("connection", (socket) => {
-  // 接続直後：ロビーで人数・一覧を表示するため送る
   socket.emit("user list", Array.from(activeUsers.values()).map(u => u.username));
   socket.emit("user count", activeUsers.size);
 
@@ -101,7 +96,6 @@ io.on("connection", (socket) => {
     socket.username = name;
     socket.isAdmin  = isAdmin;
 
-    // 一時離脱からの復帰
     if (awayUsers.has(name)) {
       clearTimeout(awayUsers.get(name).timer);
       awayUsers.delete(name);
@@ -112,12 +106,14 @@ io.on("connection", (socket) => {
     broadcastUsers();
     socket.emit("join result", { ok: true, isAdmin });
 
-    // 過去ログを本人に送り、完了後に入室通知（→ 入室通知が一番下に来る）
-    db.all(`SELECT * FROM messages ORDER BY id ASC`, [], (err, rows) => {
-      if (err) return;
+    // 過去ログを本人に送り、完了後に入室通知
+    try {
+      const rows = db.prepare(`SELECT * FROM messages ORDER BY id ASC`).all(); // ★変更
       rows.forEach(row => socket.emit("chat message", row));
       io.emit("system message", { message: `${name} が入室しました` });
-    });
+    } catch (err) {
+      console.error(err);
+    }
   });
 
   // ② チャットメッセージ
@@ -137,12 +133,14 @@ io.on("connection", (socket) => {
     // /clear
     if (text === "/clear") {
       if (!socket.isAdmin) { socket.emit("system message", { message: "管理者のみ使用できます" }); return; }
-      db.run(`DELETE FROM messages`, [], err => {
-        if (err) return;
+      try {
+        db.prepare(`DELETE FROM messages`).run(); // ★変更
         writeAdminLog(`${socket.username} が全メッセージを削除`);
         io.emit("clear messages");
         io.emit("system message", { message: "管理者がメッセージを全削除しました" });
-      });
+      } catch (err) {
+        console.error(err);
+      }
       return;
     }
 
@@ -168,20 +166,17 @@ io.on("connection", (socket) => {
       if (!targetSocket) { socket.emit("system message", { message: `「${targetName}」は見つかりません` }); return; }
       writeAdminLog(`${socket.username} が ${targetName} をキック`);
       targetSocket.emit("kicked");
-      // kicked イベント受信後クライアントが切断するので、disconnect で退出通知される
       return;
     }
 
     // 通常メッセージ
     const time = new Date().toTimeString().slice(0, 5);
-    db.run(
-      `INSERT INTO messages (username, message, time) VALUES (?, ?, ?)`,
-      [socket.username, text, time],
-      function (err) {
-        if (err) return;
-        io.emit("chat message", { id: this.lastID, username: socket.username, message: text, time });
-      }
-    );
+    try {
+      const result = db.prepare(`INSERT INTO messages (username, message, time) VALUES (?, ?, ?)`).run(socket.username, text, time); // ★変更
+      io.emit("chat message", { id: result.lastInsertRowid, username: socket.username, message: text, time }); // ★変更
+    } catch (err) {
+      console.error(err);
+    }
   });
 
   // ③ Typing indicator
@@ -197,14 +192,16 @@ io.on("connection", (socket) => {
   // ④ 個別削除（管理者専用）
   socket.on("delete message", (id) => {
     if (!socket.isAdmin) return;
-    db.run(`DELETE FROM messages WHERE id = ?`, [id], err => {
-      if (err) return;
+    try {
+      db.prepare(`DELETE FROM messages WHERE id = ?`).run(id); // ★変更
       writeAdminLog(`${socket.username} がメッセージ ID:${id} を削除`);
       io.emit("delete message", id);
-    });
+    } catch (err) {
+      console.error(err);
+    }
   });
 
-  // ⑤ 退室ボタン（10分間セッション保持）
+  // ⑤ 退室ボタン
   socket.on("leave", () => {
     if (!socket.username) return;
     const name    = socket.username;
@@ -220,7 +217,7 @@ io.on("connection", (socket) => {
     }, 10 * 60 * 1000);
 
     awayUsers.set(name, { timer, isAdmin });
-    socket.username = null; // disconnect時の二重通知を防ぐ
+    socket.username = null;
     socket.disconnect(true);
   });
 
@@ -246,10 +243,9 @@ server.listen(PORT, () => {
 function shutdown() {
   console.log("\nシャットダウン中...");
   server.close(() => {
-    db.close(() => {
-      console.log("DB接続を閉じました");
-      process.exit(0);
-    });
+    db.close(); // ★変更
+    console.log("DB接続を閉じました");
+    process.exit(0);
   });
   setTimeout(() => process.exit(1), 5000);
 }
