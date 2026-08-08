@@ -19,9 +19,9 @@
   },
   "homepage": "https://github.com/SJ273/simple-chat-app#readme",
   "dependencies": {
-    "better-sqlite3": "^12.10.0",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "socket.io": "^4.8.3"
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0",
+    "pg": "^8.11.0",
+    "socket.io": "^4.7.0"
   }
 }
